@@ -1,0 +1,10 @@
+apiVersion: v2
+name: "metrics"
+version: "0.0.1"
+dependencies:
+  - name: kube-prometheus-stack
+    version: "70.0.1"
+    repository: "https://prometheus-community.github.io/helm-charts"
+  - name: tempo
+    version: 1.18.3
+    repository: "https://grafana.github.io/helm-charts"

@@ -1,0 +1,615 @@
+global:
+  scrapeconfig:
+    enabled: false # set to true for the third approach of Prometheus metrics monitor 
+    name: "grafana-tempo"
+    labels:
+      prometheus: monitoring-prometheus
+    spec:
+      staticConfigs:
+        - targets: ['grafana-tempo.metrics.svc.cluster.local:3100']
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+kube-prometheus-stack:
+  ## Create default rules for monitoring the cluster
+  ##
+  defaultRules:
+    create: true
+    rules:
+      alertmanager: true
+      etcd: true
+      configReloaders: true
+      general: true
+      k8sContainerCpuUsageSecondsTotal: true
+      k8sContainerMemoryCache: true
+      k8sContainerMemoryRss: true
+      k8sContainerMemorySwap: true
+      k8sContainerResource: true
+      k8sContainerMemoryWorkingSetBytes: true
+      k8sPodOwner: true
+      kubeApiserverAvailability: true
+      kubeApiserverBurnrate: true
+      kubeApiserverHistogram: true
+      kubeApiserverSlos: true
+      kubeControllerManager: true
+      kubelet: true
+      kubeProxy: true
+      kubePrometheusGeneral: true
+      kubePrometheusNodeRecording: true
+      kubernetesApps: true
+      kubernetesResources: true
+      kubernetesStorage: true
+      kubernetesSystem: true
+      kubeSchedulerAlerting: true
+      kubeSchedulerRecording: true
+      kubeStateMetrics: true
+      network: true
+      node: true
+      nodeExporterAlerting: true
+      nodeExporterRecording: true
+      prometheus: true
+      prometheusOperator: true
+      windows: true
+
+  ## Configuration for alertmanager
+  ## ref: https://prometheus.io/docs/alerting/alertmanager/
+  ##
+  alertmanager:
+    enabled: false
+
+  ## Using default values from https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
+  ##
+  grafana:
+    enabled: false
+
+  ## Component scraping the kubelet and kubelet-hosted cAdvisor
+  ##
+  kubelet:
+    enabled: true
+    namespace: kube-system
+
+    serviceMonitor:
+      enabled: true
+      ## Enable scraping /metrics from kubelet's service
+      kubelet: true
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      resourceRelabelings:
+        - action: replace
+          sourceLabels: [__metrics_path__]
+          targetLabel: metrics_path
+
+      ## MetricRelabelConfigs to apply to samples after scraping, but before ingestion.
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      metricRelabelings:
+        # Reduce bucket cardinality of kubelet storage operations.
+        - action: drop
+          sourceLabels: [__name__, le]
+          regex: (csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\.0)?
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      ## metrics_path is required to match upstream rules and charts
+      relabelings:
+        - action: replace
+          sourceLabels: [__metrics_path__]
+          targetLabel: metrics_path
+
+  ## Component scraping the kube controller manager
+  ##
+  kubeControllerManager:
+    enabled: true
+
+    ## If using kubeControllerManager.endpoints only the port and targetPort are used
+    ##
+    service:
+      enabled: true
+
+    serviceMonitor:
+      enabled: true
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      ## port: Name of the port the metrics will be scraped from
+      ##
+      port: http-metrics
+
+      jobLabel: jobLabel
+      selector: {}
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+ 
+  ## Component scraping coreDns. Use either this or kubeDns
+  ##
+  coreDns:
+    enabled: true
+    service:
+      enabled: true
+
+    serviceMonitor:
+      enabled: true
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      ## port: Name of the port the metrics will be scraped from
+      ##
+      port: http-metrics
+
+      jobLabel: jobLabel
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+  ## Component scraping kubeDns. Use either this or coreDns
+  ##
+  kubeDns:
+    enabled: false
+
+    serviceMonitor:
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+  ## Component scraping etcd
+  ##
+  kubeEtcd:
+    enabled: true
+
+    ## Etcd service. If using kubeEtcd.endpoints only the port and targetPort are used
+    ##
+    service:
+      enabled: true
+      port: 2381
+      targetPort: 2381
+      ipDualStack:
+        enabled: false
+        ipFamilies: ["IPv6", "IPv4"]
+        ipFamilyPolicy: "PreferDualStack"
+
+    serviceMonitor:
+      enabled: true
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+  ## Component scraping kube scheduler
+  ##
+  kubeScheduler:
+    enabled: true
+
+    ## If using kubeScheduler.endpoints only the port and targetPort are used
+    ##
+    service:
+      enabled: true
+      ## If null or unset, the value is determined dynamically based on target Kubernetes version due to change
+      ## of default port in Kubernetes 1.23.
+      ##
+      port: null
+      targetPort: null
+      ipDualStack:
+        enabled: false
+        ipFamilies: ["IPv6", "IPv4"]
+        ipFamilyPolicy: "PreferDualStack"
+
+    serviceMonitor:
+      enabled: true
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      ## port: Name of the port the metrics will be scraped from
+      ##
+      port: http-metrics
+
+      jobLabel: jobLabel
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+  ## Component scraping kube proxy
+  ##
+  kubeProxy:
+    enabled: true
+
+    service:
+      enabled: true
+      port: 10249
+      targetPort: 10249
+      ipDualStack:
+        enabled: false
+        ipFamilies: ["IPv6", "IPv4"]
+        ipFamilyPolicy: "PreferDualStack"
+
+    serviceMonitor:
+      enabled: true
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      ## port: Name of the port the metrics will be scraped from
+      ##
+      port: http-metrics
+
+      jobLabel: jobLabel
+
+      ## RelabelConfigs to apply to samples before scraping
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+      ##
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+  ## Component scraping kube state metrics
+  ##
+  kubeStateMetrics:
+    enabled: true
+
+  ## Configuration for kube-state-metrics subchart
+  ##
+  kube-state-metrics:
+    namespaceOverride: ""
+    rbac:
+      create: true
+    releaseLabel: true
+
+    ## Enable scraping via kubernetes-service-endpoints
+    ## Disabled by default as we service monitor is enabled below
+    ##
+    prometheusScrape: false
+
+    prometheus:
+      monitor:
+        ## Enable scraping via service monitor
+        ## Disable to prevent duplication if you enable prometheusScrape above
+        ##
+        enabled: true
+
+        ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+        ##
+        interval: ""
+
+        ## RelabelConfigs to apply to samples before scraping
+        ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+        ##
+        relabelings:
+          - targetLabel: 'cluster'
+            replacement: 'aks'
+            action: 'replace'
+
+    selfMonitor:
+      enabled: false
+
+  ## Deploy node exporter as a daemonset to all nodes
+  ##
+  nodeExporter:
+    enabled: false
+    operatingSystems:
+      linux:
+        enabled: true
+      aix:
+        enabled: true
+      darwin:
+        enabled: true
+
+    ## ForceDeployDashboard Create dashboard configmap even if nodeExporter deployment has been disabled
+    ##
+    forceDeployDashboards: false
+
+  ## Configuration for prometheus-node-exporter subchart
+  ##
+  prometheus-node-exporter:
+    prometheus:
+      monitor:
+        enabled: true
+
+        jobLabel: jobLabel
+
+        ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+        ##
+        interval: ""
+
+        ## RelabelConfigs to apply to samples before scraping
+        ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#relabelconfig
+        ##
+        relabelings:
+          - targetLabel: 'cluster'
+            replacement: 'aks'
+            action: 'replace'
+
+  ## Manages Prometheus and Alertmanager components
+  ##
+  prometheusOperator:
+    enabled: true
+
+    ## Configuration for Prometheus operator service
+    ##
+    service:
+      annotations: {}
+      labels: {}
+      clusterIP: ""
+      ipDualStack:
+        enabled: false
+        ipFamilies: ["IPv6", "IPv4"]
+        ipFamilyPolicy: "PreferDualStack"
+
+    ## Port to expose on each node
+    ## Only used if service.type is 'NodePort'
+    ##
+      nodePort: 30080
+
+      nodePortTls: 30443
+
+      ## Denotes if this Service desires to route external traffic to node-local or cluster-wide endpoints
+      ##
+      externalTrafficPolicy: Cluster
+
+    ## Service type
+    ## NodePort, ClusterIP, LoadBalancer
+    ##
+      type: ClusterIP
+
+    kubeletService:
+      ## If true, the operator will create and maintain a service for scraping kubelets
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/helm/prometheus-operator/README.md
+      ##
+      enabled: true
+      namespace: kube-system
+      selector: ""
+      ## Use '{{ template "kube-prometheus-stack.fullname" . }}-kubelet' by default
+      name: ""
+
+    ## Create Endpoints objects for kubelet targets.
+    kubeletEndpointsEnabled: true
+    ## Create EndpointSlice objects for kubelet targets.
+    kubeletEndpointSliceEnabled: false
+
+    ## Create a servicemonitor for the operator
+    ##
+    serviceMonitor:
+      ## If true, create a serviceMonitor for prometheus operator
+      ##
+      selfMonitor: true
+
+      relabelings:
+        - targetLabel: 'cluster'
+          replacement: 'aks'
+          action: 'replace'
+
+  ## Deploy a Prometheus instance
+  ##
+  prometheus:
+    enabled: true
+
+    ## Configuration for Prometheus service
+    ##
+    service:
+      enabled: true
+      annotations: {}
+      labels: {}
+      clusterIP: ""
+      ipDualStack:
+        enabled: false
+        ipFamilies: ["IPv6", "IPv4"]
+        ipFamilyPolicy: "PreferDualStack"
+
+      ## Port for Prometheus Service to listen on
+      ##
+      port: 9090
+
+      ## To be used with a proxy extraContainer port
+      targetPort: 9090
+
+      ## Port for Prometheus Reloader to listen on
+      ##
+      reloaderWebPort: 8080
+
+      ## List of IP addresses at which the Prometheus server service is available
+      ## Ref: https://kubernetes.io/docs/user-guide/services/#external-ips
+      ##
+      externalIPs: []
+
+      ## Port to expose on each node
+      ## Only used if service.type is 'NodePort'
+      ##
+      nodePort: 30090
+
+      ## Denotes if this Service desires to route external traffic to node-local or cluster-wide endpoints
+      ##
+      externalTrafficPolicy: Cluster
+
+      ## Service type
+      ##
+      type: ClusterIP
+
+    serviceMonitor:
+      ## If true, create a serviceMonitor for prometheus
+      ##
+      selfMonitor: true
+
+      ## Scrape interval. If not set, the Prometheus default scrape interval is used.
+      ##
+      interval: ""
+
+      #   relabel configs to apply to samples before ingestion.
+      ##
+      relabelings: []
+
+    ## Settings affecting prometheusSpec
+    ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#prometheusspec
+    ##
+    prometheusSpec:
+      ## Interval between consecutive scrapes.
+      ## Defaults to 30s.
+      ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/release-0.44/pkg/prometheus/promcfg.go#L180-L183
+      ##
+      scrapeInterval: ""
+
+      ## scrapeConfigs to be selected for target discovery.
+      ## If {}, select all scrapeConfigs
+      ##
+      scrapeConfigSelector: {}
+      # scrapeConfigSelector: # scrapeConfigSelector for the third approach of Prometheus metrics monitor
+      #   matchLabels:
+      #     prometheus: monitoring-prometheus
+
+      ## How long to retain metrics
+      ##
+      retention: 10d
+
+      ## AdditionalScrapeConfigs allows specifying additional Prometheus scrape configurations. Scrape configurations
+      ## are appended to the configurations generated by the Prometheus Operator. Job configurations must have the form
+      ## as specified in the official Prometheus documentation:
+      ## https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config. As scrape configs are
+      ## appended, the user is responsible to make sure it is valid. Note that using this feature may expose the possibility
+      ## to break upgrades of Prometheus. It is advised to review Prometheus release notes to ensure that no incompatible
+      ## scrape configs are going to break Prometheus after the upgrade.
+      ## AdditionalScrapeConfigs can be defined as a list or as a templated string.
+      ##
+      ## The scrape configuration example below will find master nodes, provided they have the name .*mst.*, relabel the
+      ## port to 2379 and allow etcd scraping provided it is running on all Kubernetes master nodes
+      ##
+      additionalScrapeConfigs: []
+      # additionalScrapeConfigs:  # second approach of Prometheus metrics monitor 
+      #   - job_name: 'grafana-tempo-additional'
+      #     scrape_interval: 15s
+      #     static_configs:
+      #       - targets: ['grafana-tempo.metrics.svc.cluster.local:3100']
+      #     relabel_configs:
+      #       - target_label: 'cluster'
+      #         replacement: 'aks'
+      #         action: 'replace'
+
+tempo:
+  # -- Overrides the chart's computed fullname
+  fullnameOverride: "grafana-tempo"
+
+  # -- Define the amount of instances
+  replicas: 1
+
+  tempo:
+    repository: grafana/tempo
+    pullPolicy: IfNotPresent
+
+    # Tempo server configuration.
+    # Refers to: https://grafana.com/docs/tempo/latest/configuration/#server
+    server:
+      # -- HTTP server listen port
+      http_listen_port: 3100
+    # Readiness and Liveness Probe Configuration Options
+    livenessProbe:
+      httpGet:
+        path: /ready
+        port: 3100
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 3100
+      initialDelaySeconds: 20
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    storage:
+      trace:
+        # tempo storage backend.
+        # Refers to: https://grafana.com/docs/tempo/latest/configuration/#storage
+        ## Use s3 for example
+        # backend: s3
+        # store traces in s3
+        # s3:
+        #   bucket: <your s3 bucket>                        # store traces in this bucket
+        #   endpoint: s3.dualstack.us-east-2.amazonaws.com  # api endpoint
+        #   access_key: ...                                 # optional. access key when using static credentials.
+        #   secret_key: ...                                 # optional. secret key when using static credentials.
+        #   insecure: false                                 # optional. enable if endpoint is http
+        backend: local
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+    # this configuration will listen on all ports and protocols that tempo is capable of.
+    # the receives all come from the OpenTelemetry collector.  more configuration information can
+    # be found there: https://github.com/open-telemetry/opentelemetry-collector/tree/master/receiver
+    receivers:
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_binary:
+            endpoint: 0.0.0.0:6832
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+      opencensus:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+          http:
+            endpoint: "0.0.0.0:4318"
+
+  tempoQuery:
+    # -- if False the tempo-query container is not deployed
+    enabled: false
+
+  service:
+    type: ClusterIP
+    clusterIP: ""
+
+  serviceMonitor:
+    enabled: true # set to true for the first approach of Prometheus metrics monitor 
+    interval: 15s
+    additionalLabels:
+      release: metrics
+    annotations: {}
+    # scrapeTimeout: 10s
+
+  persistence:
+    enabled: false

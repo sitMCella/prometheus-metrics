@@ -1,0 +1,15 @@
+{{- if .Values.global.scrapeconfig.enabled }}
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: {{ .Values.global.scrapeconfig.name }}
+  namespace: metrics
+  labels:
+    {{- with .Values.global.scrapeconfig.labels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.global.scrapeconfig.spec }}
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
