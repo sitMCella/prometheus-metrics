@@ -123,7 +123,7 @@ Service Monitor Selector:
       Release:  metrics
 ```
 
-Grafana Tempo is configured with:
+Enable ServiceMonitor for Grafana Tempo in [values.yaml](https://github.com/sitMCella/prometheus-metrics/blob/main/helm/values.yaml):
 
 ```sh
 tempo:
@@ -137,7 +137,7 @@ tempo:
 
 2. Additional Scrape Configs
 
-Prometheus is configured with additional scrape configurations:
+Uncomment the Prometheus additional scrape configurations in [values.yaml](https://github.com/sitMCella/prometheus-metrics/blob/main/helm/values.yaml):
 
 ```sh
 kube-prometheus-stack:
@@ -156,7 +156,7 @@ kube-prometheus-stack:
 
 3. ScrapeConfig
 
-Prometheus configuration:
+Uncomment the Prometheus configuration in [values.yaml](https://github.com/sitMCella/prometheus-metrics/blob/main/helm/values.yaml):
 
 ```sh
 kube-prometheus-stack:
@@ -167,11 +167,12 @@ kube-prometheus-stack:
           prometheus: monitoring-prometheus
 ```
 
-The following are the parameters to the ScrapeConfig resource:
+Enable the ScrapeConfig resource in [values.yaml](https://github.com/sitMCella/prometheus-metrics/blob/main/helm/values.yaml):
 
 ```sh
 global:
   scrapeconfig:
+    enabled: false
     name: "grafana-tempo"
     labels:
       prometheus: monitoring-prometheus
